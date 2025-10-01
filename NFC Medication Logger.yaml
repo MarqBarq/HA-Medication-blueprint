@@ -1,13 +1,13 @@
 blueprint:
-  name: NFC Medication Logger (up to 4 doses, inline times or helpers, beta v5)
+  name: NFC Medication Logger (up to 4 doses, inline times or helpers, beta v7)
   description: >
     Track up to 4 daily medication doses using an NFC/RFID tag.
     Valid scans inside a global time window log the dose timestamp, prevent double-logging,
     send contextual push notifications, and (optionally) decrement inventory with low/out alerts.
-    Also supports reminders (scheduled time + offset) if a dose was not logged.
-    For each dose, you can EITHER select an inline time OR a helper entity; inline time takes precedence.
+    Supports reminders (scheduled time + offset) if a dose was not logged.
+    For each dose, you can EITHER select an inline time OR an input_datetime helper; inline time takes precedence.
   domain: automation
-  source_url: https://github.com/your-account/your-repo/blob/main/nfc_med_logger_beta_v5.yaml
+  source_url: https://github.com/your-account/your-repo/blob/main/nfc_med_logger_beta_v7.yaml
 
   input:
     # --- Medication metadata ---
@@ -34,29 +34,29 @@ blueprint:
 
     # --- Tag + notifications ---
     tag_id:
-  name: NFC Tag
-  description: >
-    Pick one of your registered Tags (Settings → Tags). This will fill in the tag ID automatically.
-  selector:
-    tag: {}
+      name: NFC Tag
+      description: >
+        Pick one of your registered Tags (Settings → Tags). This will fill in the ID automatically.
+        If this selector is not available in your HA version, switch to a text field input.
+      selector:
+        tag: {}
 
-notify_mobile_device:
-  name: Phone (Mobile App)
-  description: >
-    Pick your phone if you use the Home Assistant Companion App.
-    We’ll auto-use its push notify service (notify.mobile_app_<device>).
-    Leave blank if you prefer to enter a custom notify service below.
-  selector:
-    device:
-      integration: mobile_app
+    notify_mobile_device:
+      name: Phone (Mobile App)
+      description: >
+        Pick your phone if you use the Home Assistant Companion App.
+        We’ll auto-use its push notify service (notify.mobile_app_<device>).
+        Leave blank if you prefer to enter a custom notify service below.
+      selector:
+        device:
+          integration: mobile_app
 
-notify_service:
-  name: Notify Service (manual fallback)
-  description: >
-    Optional. If you don’t select a phone above, enter a full notify service here.
-    Example: notify.mobile_app_mark_s_phone_2 or notify.telegram_mark.
-  selector:
-    text: {}
+    notify_service:
+      name: Notify Service (manual fallback)
+      description: >
+        Optional. If you don’t select a phone above, enter a full notify service here.
+        Example: notify.mobile_app_mark_s_phone_2 or notify.telegram_mark
+      selector: { text: {} }
 
     # --- Global scan window ---
     dose_window:
@@ -254,6 +254,8 @@ variables:
   v_med_name: !input med_name
   v_med_dose: !input med_dose
   v_med_directions: !input med_directions
+
+  # Derive notify service: prefer mobile_app device if selected, else manual service
   v_notify_device: !input notify_mobile_device
   v_notify_manual: !input notify_service
   v_notify: >
@@ -264,7 +266,6 @@ variables:
     {% endif %}
 
   v_window: !input dose_window
-
   v_enable_reminders: !input enable_reminders
   v_reminder_offset: !input reminder_offset
 
@@ -276,6 +277,7 @@ variables:
   v_units_per_refill: !input pills_per_refill
   v_pharmacy_note: !input pharmacy_contact_note
 
+  # Times: inline or entity (inline wins)
   v_d1_inline: !input dose1_time_inline
   v_d1_entity: !input dose1_time_entity
   v_d2_inline: !input dose2_time_inline
@@ -337,7 +339,7 @@ action:
               now_ts: "{{ as_timestamp(now()) }}"
               today: "{{ now().date() }}"
 
-              # Resolve dose times (prefer inline; else helper state)
+              # Resolve times (prefer inline; else helper state)
               t1: "{{ v_d1_inline if v_d1_inline else (states(v_d1_entity) if v_d1_entity else '') }}"
               t2: "{{ v_d2_inline if v_d2_inline else (states(v_d2_entity) if v_d2_entity else '') }}"
               t3: "{{ v_d3_inline if v_d3_inline else (states(v_d3_entity) if v_d3_entity else '') }}"
@@ -357,14 +359,11 @@ action:
                 {% set ns = namespace(result=None) %}
                 {% for d in doses %}
                   {% if d.t not in ['', 'unknown', 'unavailable'] %}
-
-                    {# Build local, timezone-aware scheduled datetime for TODAY #}
                     {% if d.t|length > 8 %}
                       {% set sched_dt = as_local(as_datetime(d.t)) %}
                     {% else %}
                       {% set sched_dt = today_at(d.t) %}
                     {% endif %}
-
                     {% if sched_dt %}
                       {% set sched_ts = as_timestamp(sched_dt) %}
                       {% set win_start = sched_ts - (v_window|int * 60) %}
@@ -471,10 +470,73 @@ action:
                                                 {% if refills_left is not none %}Refills left: {{ refills_left }}. {% endif %}
                                                 {{ 'Contact: ' ~ v_pharmacy_note if v_pharmacy_note }}
 
-                           # --- Outside all windows → tell next dose time ---
+              # --- Outside all windows → tell next dose time ---
               - conditions: []
                 sequence:
                   - variables:
+                      # Build aware datetimes for today from times
+                      c1: >
+                        {% if t1 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t1)) if t1|length > 8 else today_at(t1) }}
+                        {% else %}{{ none }}{% endif %}
+                      c2: >
+                        {% if t2 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t2)) if t2|length > 8 else today_at(t2) }}
+                        {% else %}{{ none }}{% endif %}
+                      c3: >
+                        {% if t3 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t3)) if t3|length > 8 else today_at(t3) }}
+                        {% else %}{{ none }}{% endif %}
+                      c4: >
+                        {% if t4 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t4)) if t4|length > 8 else today_at(t4) }}
+                        {% else %}{{ none }}{% endif %}
+
+                      now_ts2: "{{ as_timestamp(now()) }}"
+
+                      next_today: >
+                        {% set cand = [c1, c2, c3, c4]
+                           | reject('equalto', none)
+                           | map('as_timestamp')
+                           | select('ge', now_ts2)
+                           | list %}
+                        {% if cand|length > 0 %}
+                          {{ as_datetime(cand|min) }}
+                        {% else %}
+                          {{ none }}
+                        {% endif %}
+
+                      next_tomorrow: >
+                        {% if next_today %}
+                          {{ none }}
+                        {% else %}
+                          {% set today = now().date() %}
+                          {% set tomorrow = today + timedelta(days=1) %}
+                          {% set ts = [] %}
+                          {% if t1 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t1)) + timedelta(days=1)) if t1|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t1)) ] %}
+                          {% endif %}
+                          {% if t2 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t2)) + timedelta(days=1)) if t2|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t2)) ] %}
+                          {% endif %}
+                          {% if t3 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t3)) + timedelta(days=1)) if t3|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t3)) ] %}
+                          {% endif %}
+                          {% if t4 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t4)) + timedelta(days=1)) if t4|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t4)) ] %}
+                          {% endif %}
+                          {% if ts|length > 0 %}
+                            {{ as_datetime(ts|min) }}
+                          {% else %}
+                            {{ none }}
+                          {% endif %}
+                        {% endif %}
+
+                      next_sched: "{{ next_today if next_today else next_tomorrow }}"
                       next_sched_fmt: >
                         {% if next_sched %}
                           {{ as_local(as_datetime(next_sched)).strftime('%-I:%M %p') }}
@@ -488,7 +550,6 @@ action:
                       message: >
                         It's not time for {{ v_med_name }} yet.
                         Next dose at {{ next_sched_fmt }}.
-
 
       # =========================================
       # ============ REMINDER BRANCH ============
@@ -524,5 +585,3 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) was scheduled but not logged.
                 Directions: {{ v_med_directions }}
-
-
