@@ -1,11 +1,13 @@
 blueprint:
-  name: NFC Medication Logger (up to 4 doses, beta v3)
+  name: NFC Medication Logger (up to 4 doses, inline times or helpers, beta v5)
   description: >
     Track up to 4 daily medication doses using an NFC/RFID tag.
     Valid scans inside a global time window log the dose timestamp, prevent double-logging,
     send contextual push notifications, and (optionally) decrement inventory with low/out alerts.
     Also supports reminders (scheduled time + offset) if a dose was not logged.
+    For each dose, you can EITHER select an inline time OR a helper entity; inline time takes precedence.
   domain: automation
+  source_url: https://github.com/your-account/your-repo/blob/main/nfc_med_logger_beta_v5.yaml
 
   input:
     # --- Medication metadata ---
@@ -14,24 +16,21 @@ blueprint:
       description: >
         Friendly name for the medication.
         Example: "Metformin" or "Vitamin D".
-      selector:
-        text:
+      selector: { text: {} }
 
     med_dose:
       name: Dose
       description: >
         The strength or amount per dose.
         Example: "500 mg", "1 tablet", or "2 drops".
-      selector:
-        text:
+      selector: { text: {} }
 
     med_directions:
       name: Directions
       description: >
         Caregiver notes or instructions on how to take the medication.
         Example: "Take with food", "Use inhaler before exercise", "Take at bedtime with water".
-      selector:
-        text:
+      selector: { text: {} }
 
     # --- Tag + notifications ---
     tag_id:
@@ -39,8 +38,7 @@ blueprint:
       description: >
         The ID of the NFC/RFID tag attached to the medication bottle.
         Create/scan tags in Home Assistant (Settings → Tags) and copy the Tag ID.
-      selector:
-        text:
+      selector: { text: {} }
 
     notify_service:
       name: Notify Service
@@ -48,8 +46,7 @@ blueprint:
         The Home Assistant notify service for push alerts.
         Example: "notify.mobile_app_mark_s_phone_2".
       default: notify.mobile_app_mark_s_phone_2
-      selector:
-        text:
+      selector: { text: {} }
 
     # --- Global scan window ---
     dose_window:
@@ -65,13 +62,18 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
-    # --- Dose 1 (required for most setups) ---
-    dose1_time:
-      name: Dose 1 Scheduled Time (input_datetime)
+    # -------------------- DOSE 1 --------------------
+    dose1_time_inline:
+      name: Dose 1 Time (inline)
       description: >
-        Input_datetime entity storing the scheduled time of Dose 1 (time-only or date+time).
-        Create via: Settings → Devices & Services → Helpers → Date/Time.
-        Example: input_datetime.med1_dose1_time
+        Pick a daily time directly here (no helper needed). If set, this is used and the helper is ignored.
+      selector: { time: {} }
+
+    dose1_time_entity:
+      name: Dose 1 Time (input_datetime helper)
+      description: >
+        Optional alternative: select an input_datetime entity that stores the daily time.
+        Ignored if "Dose 1 Time (inline)" is set.
       selector:
         entity:
           domain: input_datetime
@@ -85,59 +87,62 @@ blueprint:
         entity:
           domain: input_datetime
 
-    # --- Dose 2 (optional) ---
-    dose2_time:
-      name: Dose 2 Scheduled Time (input_datetime)
-      description: >
-        Input_datetime entity for the scheduled time of Dose 2.
-        Leave blank if not used.
+    # -------------------- DOSE 2 --------------------
+    dose2_time_inline:
+      name: Dose 2 Time (inline)
+      description: Pick a daily time directly here (optional).
+      selector: { time: {} }
+
+    dose2_time_entity:
+      name: Dose 2 Time (input_datetime helper)
+      description: Select an input_datetime entity for Dose 2 time (optional).
       selector:
         entity:
           domain: input_datetime
 
     dose2_taken:
       name: Dose 2 Last Taken (input_datetime)
-      description: >
-        Input_datetime entity storing when Dose 2 was last logged.
-        Leave blank if not used.
+      description: Input_datetime entity storing when Dose 2 was last logged (optional).
       selector:
         entity:
           domain: input_datetime
 
-    # --- Dose 3 (optional) ---
-    dose3_time:
-      name: Dose 3 Scheduled Time (input_datetime)
-      description: >
-        Input_datetime entity for the scheduled time of Dose 3.
-        Leave blank if not used.
+    # -------------------- DOSE 3 --------------------
+    dose3_time_inline:
+      name: Dose 3 Time (inline)
+      description: Pick a daily time directly here (optional).
+      selector: { time: {} }
+
+    dose3_time_entity:
+      name: Dose 3 Time (input_datetime helper)
+      description: Select an input_datetime entity for Dose 3 time (optional).
       selector:
         entity:
           domain: input_datetime
 
     dose3_taken:
       name: Dose 3 Last Taken (input_datetime)
-      description: >
-        Input_datetime entity storing when Dose 3 was last logged.
-        Leave blank if not used.
+      description: Input_datetime entity storing when Dose 3 was last logged (optional).
       selector:
         entity:
           domain: input_datetime
 
-    # --- Dose 4 (optional) ---
-    dose4_time:
-      name: Dose 4 Scheduled Time (input_datetime)
-      description: >
-        Input_datetime entity for the scheduled time of Dose 4.
-        Leave blank if not used.
+    # -------------------- DOSE 4 --------------------
+    dose4_time_inline:
+      name: Dose 4 Time (inline)
+      description: Pick a daily time directly here (optional).
+      selector: { time: {} }
+
+    dose4_time_entity:
+      name: Dose 4 Time (input_datetime helper)
+      description: Select an input_datetime entity for Dose 4 time (optional).
       selector:
         entity:
           domain: input_datetime
 
     dose4_taken:
       name: Dose 4 Last Taken (input_datetime)
-      description: >
-        Input_datetime entity storing when Dose 4 was last logged.
-        Leave blank if not used.
+      description: Input_datetime entity storing when Dose 4 was last logged (optional).
       selector:
         entity:
           domain: input_datetime
@@ -148,8 +153,7 @@ blueprint:
       description: >
         Turn on reminder notifications if a dose is not logged by its scheduled time + offset.
       default: true
-      selector:
-        boolean:
+      selector: { boolean: {} }
 
     reminder_offset:
       name: Reminder Offset (minutes after scheduled time)
@@ -171,8 +175,7 @@ blueprint:
         When ON, a successful (in-window) scan will decrement inventory
         and send low/out alerts with optional refill context.
       default: true
-      selector:
-        boolean:
+      selector: { boolean: {} }
 
     inventory_entity:
       name: Inventory (remaining units) - input_number
@@ -233,8 +236,7 @@ blueprint:
       description: >
         Shown in low/out alerts. Example: "CVS Frederick, (301) 555-1234".
       default: ""
-      selector:
-        text:
+      selector: { text: {} }
 
 mode: restart
 
@@ -256,24 +258,52 @@ variables:
   v_units_per_refill: !input pills_per_refill
   v_pharmacy_note: !input pharmacy_contact_note
 
+  v_d1_inline: !input dose1_time_inline
+  v_d1_entity: !input dose1_time_entity
+  v_d2_inline: !input dose2_time_inline
+  v_d2_entity: !input dose2_time_entity
+  v_d3_inline: !input dose3_time_inline
+  v_d3_entity: !input dose3_time_entity
+  v_d4_inline: !input dose4_time_inline
+  v_d4_entity: !input dose4_time_entity
+
+  v_d1_taken: !input dose1_taken
+  v_d2_taken: !input dose2_taken
+  v_d3_taken: !input dose3_taken
+  v_d4_taken: !input dose4_taken
+
+# Triggers (tag + reminder anchors for inline and entity times)
 trigger:
-  # Tag scan
   - platform: tag
     tag_id: !input tag_id
 
-  # Reminder anchors (we'll delay by reminder_offset after the trigger fires)
   - platform: time
-    at: !input dose1_time
-    id: dose1_reminder
+    at: !input dose1_time_inline
+    id: dose1_inline_reminder
   - platform: time
-    at: !input dose2_time
-    id: dose2_reminder
+    at: !input dose1_time_entity
+    id: dose1_entity_reminder
+
   - platform: time
-    at: !input dose3_time
-    id: dose3_reminder
+    at: !input dose2_time_inline
+    id: dose2_inline_reminder
   - platform: time
-    at: !input dose4_time
-    id: dose4_reminder
+    at: !input dose2_time_entity
+    id: dose2_entity_reminder
+
+  - platform: time
+    at: !input dose3_time_inline
+    id: dose3_inline_reminder
+  - platform: time
+    at: !input dose3_time_entity
+    id: dose3_entity_reminder
+
+  - platform: time
+    at: !input dose4_time_inline
+    id: dose4_inline_reminder
+  - platform: time
+    at: !input dose4_time_entity
+    id: dose4_entity_reminder
 
 action:
   - choose:
@@ -286,43 +316,49 @@ action:
             value_template: "{{ trigger.platform == 'tag' }}"
         sequence:
           - variables:
-              now_ts: "{{ now() }}"
+              now_ts: "{{ as_timestamp(now()) }}"
               today: "{{ now().date() }}"
 
-              # Build dose objects from inputs (skip blanks)
+              # Resolve dose times (prefer inline; else helper state)
+              t1: "{{ v_d1_inline if v_d1_inline else (states(v_d1_entity) if v_d1_entity else '') }}"
+              t2: "{{ v_d2_inline if v_d2_inline else (states(v_d2_entity) if v_d2_entity else '') }}"
+              t3: "{{ v_d3_inline if v_d3_inline else (states(v_d3_entity) if v_d3_entity else '') }}"
+              t4: "{{ v_d4_inline if v_d4_inline else (states(v_d4_entity) if v_d4_entity else '') }}"
+
               doses: >
-                {%- set ds = [] -%}
-                {%- set t1 = iif('\\!input dose1_time' == '', none, ('\\!input dose1_time')) -%}
-                {%- set k1 = iif('\\!input dose1_taken' == '', none, ('\\!input dose1_taken')) -%}
-                {%- set t2 = iif('\\!input dose2_time' == '', none, ('\\!input dose2_time')) -%}
-                {%- set k2 = iif('\\!input dose2_taken' == '', none, ('\\!input dose2_taken')) -%}
-                {%- set t3 = iif('\\!input dose3_time' == '', none, ('\\!input dose3_time')) -%}
-                {%- set k3 = iif('\\!input dose3_taken' == '', none, ('\\!input dose3_taken')) -%}
-                {%- set t4 = iif('\\!input dose4_time' == '', none, ('\\!input dose4_time')) -%}
-                {%- set k4 = iif('\\!input dose4_taken' == '', none, ('\\!input dose4_taken')) -%}
-                {%- if t1 and k1 %}{% set _ = ds.append({'time': '\\!input dose1_time', 'taken': '\\!input dose1_taken'}) %}{% endif -%}
-                {%- if t2 and k2 %}{% set _ = ds.append({'time': '\\!input dose2_time', 'taken': '\\!input dose2_taken'}) %}{% endif -%}
-                {%- if t3 and k3 %}{% set _ = ds.append({'time': '\\!input dose3_time', 'taken': '\\!input dose3_taken'}) %}{% endif -%}
-                {%- if t4 and k4 %}{% set _ = ds.append({'time': '\\!input dose4_time', 'taken': '\\!input dose4_taken'}) %}{% endif -%}
-                {{ ds }}
+                {{ [
+                  {'t': t1, 'taken': v_d1_taken},
+                  {'t': t2, 'taken': v_d2_taken},
+                  {'t': t3, 'taken': v_d3_taken},
+                  {'t': t4, 'taken': v_d4_taken}
+                ] }}
 
           - variables:
               # Find the first dose whose window contains now()
               valid_dose: >
-                {% set result = none %}
+                {% set ns = namespace(result=None) %}
                 {% for d in doses %}
-                  {% set sched = states(d.time) %}
-                  {% if sched not in ['unknown','unavailable',''] %}
-                    {% set sched_dt = as_datetime(today ~ ' ' ~ sched) %}
-                    {% set win_start = sched_dt - timedelta(minutes=v_window|int) %}
-                    {% set win_end = sched_dt + timedelta(minutes=v_window|int) %}
-                    {% if now() >= win_start and now() <= win_end %}
-                      {% set result = d %}
-                      {% break %}
+                  {% if d.t not in ['', 'unknown', 'unavailable'] %}
+
+                    {# Build local, timezone-aware scheduled datetime for TODAY #}
+                    {% if d.t|length > 8 %}
+                      {% set sched_dt = as_local(as_datetime(d.t)) %}
+                    {% else %}
+                      {% set sched_dt = today_at(d.t) %}
+                    {% endif %}
+
+                    {% if sched_dt %}
+                      {% set sched_ts = as_timestamp(sched_dt) %}
+                      {% set win_start = sched_ts - (v_window|int * 60) %}
+                      {% set win_end   = sched_ts + (v_window|int * 60) %}
+                      {% if now_ts >= win_start and now_ts <= win_end %}
+                        {% set ns.result = d %}
+                        {% break %}
+                      {% endif %}
                     {% endif %}
                   {% endif %}
                 {% endfor %}
-                {{ result }}
+                {{ ns.result }}
 
           - choose:
               # --- Inside a valid window ---
@@ -352,13 +388,13 @@ action:
                             target:
                               entity_id: "{{ valid_dose.taken }}"
                             data:
-                              datetime: "{{ now_ts }}"
+                              datetime: "{{ now() }}"
                           - service: "{{ v_notify }}"
                             data:
                               title: "✅ Medication recorded"
                               message: >
                                 {{ v_med_name }} ({{ v_med_dose }}) logged at
-                                {{ now_ts.strftime('%-I:%M %p') }}.
+                                {{ as_local(now()).strftime('%-I:%M %p') }}.
                                 Directions: {{ v_med_directions }}
 
                           # ----- Inventory handling (optional) -----
@@ -421,31 +457,64 @@ action:
               - conditions: []
                 sequence:
                   - variables:
-                      next_sched: >
-                        {% set future = [] %}
-                        {% for d in doses %}
-                          {% set sched = states(d.time) %}
-                          {% if sched not in ['unknown','unavailable',''] %}
-                            {% set dt = as_datetime(today ~ ' ' ~ sched) %}
-                            {% if dt >= now() %}
-                              {% set _ = future.append(dt) %}
-                            {% endif %}
-                          {% endif %}
-                        {% endfor %}
-                        {% if future|length > 0 %}
-                          {{ future|min }}
+                      # Build aware datetimes for today from times
+                      c1: >
+                        {% if t1 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t1)) if t1|length > 8 else today_at(t1) }}
+                        {% else %}{{ none }}{% endif %}
+                      c2: >
+                        {% if t2 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t2)) if t2|length > 8 else today_at(t2) }}
+                        {% else %}{{ none }}{% endif %}
+                      c3: >
+                        {% if t3 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t3)) if t3|length > 8 else today_at(t3) }}
+                        {% else %}{{ none }}{% endif %}
+                      c4: >
+                        {% if t4 not in ['', 'unknown', 'unavailable'] %}
+                          {{ as_local(as_datetime(t4)) if t4|length > 8 else today_at(t4) }}
+                        {% else %}{{ none }}{% endif %}
+
+                      now_ts2: "{{ as_timestamp(now()) }}"
+                      next_today: >
+                        {% set cand = [c1, c2, c3, c4] | reject('equalto', none) | map('as_timestamp') | select('ge', now_ts2) | list %}
+                        {% if cand|length > 0 %}
+                          {{ as_datetime(cand|min) }}
                         {% else %}
-                          {# no remaining times today → pick the first dose time tomorrow #}
-                          {% set first = none %}
-                          {% for d in doses %}
-                            {% set sched = states(d.time) %}
-                            {% if sched not in ['unknown','unavailable',''] %}
-                              {% set first = as_datetime(today ~ ' ' ~ sched) + timedelta(days=1) %}
-                              {% break %}
-                            {% endif %}
-                          {% endfor %}
-                          {{ first }}
+                          {{ none }}
                         {% endif %}
+
+                      next_tomorrow: >
+                        {% if next_today %}
+                          {{ none }}
+                        {% else %}
+                          {% set today = now().date() %}
+                          {% set tomorrow = today + timedelta(days=1) %}
+                          {% set ts = [] %}
+                          {% if t1 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t1)) + timedelta(days=1)) if t1|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t1)) ] %}
+                          {% endif %}
+                          {% if t2 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t2)) + timedelta(days=1)) if t2|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t2)) ] %}
+                          {% endif %}
+                          {% if t3 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t3)) + timedelta(days=1)) if t3|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t3)) ] %}
+                          {% endif %}
+                          {% if t4 not in ['', 'unknown', 'unavailable'] %}
+                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t4)) + timedelta(days=1)) if t4|length > 8
+                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t4)) ] %}
+                          {% endif %}
+                          {% if ts|length > 0 %}
+                            {{ as_datetime(ts|min) }}
+                          {% else %}
+                            {{ none }}
+                          {% endif %}
+                        {% endif %}
+
+                      next_sched: "{{ next_today if next_today else next_tomorrow }}"
                   - service: "{{ v_notify }}"
                     data:
                       title: "⏳ Not time yet"
@@ -458,20 +527,22 @@ action:
       # =========================================
       - conditions:
           - condition: template
-            value_template: "{{ trigger.id is match('dose[1-4]_reminder') }}"
-          - condition: template
-            value_template: "{{ v_enable_reminders }}"
+            value_template: >
+              {{ trigger.id in [
+                   'dose1_inline_reminder','dose1_entity_reminder',
+                   'dose2_inline_reminder','dose2_entity_reminder',
+                   'dose3_inline_reminder','dose3_entity_reminder',
+                   'dose4_inline_reminder','dose4_entity_reminder'
+                 ] and v_enable_reminders }}
         sequence:
           - variables:
               today: "{{ now().date() }}"
-              # Map trigger to the matching 'taken' entity
               dose_taken_entity: >
-                {% if trigger.id == 'dose1_reminder' %} \\!input dose1_taken
-                {% elif trigger.id == 'dose2_reminder' %} \\!input dose2_taken
-                {% elif trigger.id == 'dose3_reminder' %} \\!input dose3_taken
-                {% elif trigger.id == 'dose4_reminder' %} \\!input dose4_taken
+                {% if 'dose1_' in trigger.id %} {{ v_d1_taken }}
+                {% elif 'dose2_' in trigger.id %} {{ v_d2_taken }}
+                {% elif 'dose3_' in trigger.id %} {{ v_d3_taken }}
+                {% elif 'dose4_' in trigger.id %} {{ v_d4_taken }}
                 {% endif %}
-          # wait reminder_offset, then re-check
           - delay:
               minutes: "{{ v_reminder_offset | int }}"
           - variables:
