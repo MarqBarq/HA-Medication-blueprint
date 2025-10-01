@@ -4,66 +4,40 @@ blueprint:
     Track up to 4 daily medication doses using an NFC/RFID tag.
     Valid scans inside a global time window log the dose timestamp, prevent double-logging,
     send contextual push notifications, and (optionally) decrement inventory with low/out alerts.
-    Supports reminders (scheduled time + offset) if a dose was not logged.
-    For each dose, you can EITHER select an inline time OR an input_datetime helper; inline time takes precedence.
+    Also supports reminders (scheduled time + offset) if a dose was not logged.
+    For each dose, you can EITHER select an inline time OR a helper entity; inline time takes precedence.
   domain: automation
-  source_url: https://github.com/your-account/your-repo/blob/main/nfc_med_logger_beta_v7.yaml
 
   input:
-    # --- Medication metadata ---
     med_name:
       name: Medication Name
-      description: >
-        Friendly name for the medication.
-        Example: "Metformin" or "Vitamin D".
       selector: { text: {} }
 
     med_dose:
       name: Dose
-      description: >
-        The strength or amount per dose.
-        Example: "500 mg", "1 tablet", or "2 drops".
       selector: { text: {} }
 
     med_directions:
       name: Directions
-      description: >
-        Caregiver notes or instructions on how to take the medication.
-        Example: "Take with food", "Use inhaler before exercise", "Take at bedtime with water".
       selector: { text: {} }
 
-    # --- Tag + notifications ---
     tag_id:
-      name: NFC Tag
+      name: NFC Tag ID
       description: >
-        Pick one of your registered Tags (Settings → Tags). This will fill in the ID automatically.
-        If this selector is not available in your HA version, switch to a text field input.
+        Enter the Tag ID from Settings → Tags. Example: 8b7d7f4c-xxxx-xxxx.
       selector:
-        tag: {}
-
-    notify_mobile_device:
-      name: Phone (Mobile App)
-      description: >
-        Pick your phone if you use the Home Assistant Companion App.
-        We’ll auto-use its push notify service (notify.mobile_app_<device>).
-        Leave blank if you prefer to enter a custom notify service below.
-      selector:
-        device:
-          integration: mobile_app
+        text: {}
 
     notify_service:
-      name: Notify Service (manual fallback)
+      name: Notify Service
       description: >
-        Optional. If you don’t select a phone above, enter a full notify service here.
-        Example: notify.mobile_app_mark_s_phone_2 or notify.telegram_mark
-      selector: { text: {} }
+        Enter the notify service you want to use.
+        Example: notify.mobile_app_mark_s_phone_2.
+      selector:
+        text: {}
 
-    # --- Global scan window ---
     dose_window:
       name: Global Dose Window (minutes before/after scheduled time)
-      description: >
-        How many minutes before or after the scheduled time a scan will be accepted.
-        Example: 20 → a 9:00 AM dose can be logged between 8:40–9:20.
       default: 20
       selector:
         number:
@@ -72,104 +46,78 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
-    # -------------------- DOSE 1 --------------------
+    # Doses 1–4 (inline time + helper + taken)
     dose1_time_inline:
       name: Dose 1 Time (inline)
-      description: >
-        Pick a daily time directly here (no helper needed). If set, this is used and the helper is ignored.
       selector: { time: {} }
 
     dose1_time_entity:
-      name: Dose 1 Time (input_datetime helper)
-      description: >
-        Optional alternative: select an input_datetime entity that stores the daily time.
-        Ignored if "Dose 1 Time (inline)" is set.
+      name: Dose 1 Time (helper)
       selector:
         entity:
           domain: input_datetime
 
     dose1_taken:
-      name: Dose 1 Last Taken (input_datetime)
-      description: >
-        Input_datetime entity storing when Dose 1 was last logged.
-        Example: input_datetime.med1_dose1_taken
+      name: Dose 1 Last Taken
       selector:
         entity:
           domain: input_datetime
 
-    # -------------------- DOSE 2 --------------------
     dose2_time_inline:
       name: Dose 2 Time (inline)
-      description: Pick a daily time directly here (optional).
       selector: { time: {} }
 
     dose2_time_entity:
-      name: Dose 2 Time (input_datetime helper)
-      description: Select an input_datetime entity for Dose 2 time (optional).
+      name: Dose 2 Time (helper)
       selector:
         entity:
           domain: input_datetime
 
     dose2_taken:
-      name: Dose 2 Last Taken (input_datetime)
-      description: Input_datetime entity storing when Dose 2 was last logged (optional).
+      name: Dose 2 Last Taken
       selector:
         entity:
           domain: input_datetime
 
-    # -------------------- DOSE 3 --------------------
     dose3_time_inline:
       name: Dose 3 Time (inline)
-      description: Pick a daily time directly here (optional).
       selector: { time: {} }
 
     dose3_time_entity:
-      name: Dose 3 Time (input_datetime helper)
-      description: Select an input_datetime entity for Dose 3 time (optional).
+      name: Dose 3 Time (helper)
       selector:
         entity:
           domain: input_datetime
 
     dose3_taken:
-      name: Dose 3 Last Taken (input_datetime)
-      description: Input_datetime entity storing when Dose 3 was last logged (optional).
+      name: Dose 3 Last Taken
       selector:
         entity:
           domain: input_datetime
 
-    # -------------------- DOSE 4 --------------------
     dose4_time_inline:
       name: Dose 4 Time (inline)
-      description: Pick a daily time directly here (optional).
       selector: { time: {} }
 
     dose4_time_entity:
-      name: Dose 4 Time (input_datetime helper)
-      description: Select an input_datetime entity for Dose 4 time (optional).
+      name: Dose 4 Time (helper)
       selector:
         entity:
           domain: input_datetime
 
     dose4_taken:
-      name: Dose 4 Last Taken (input_datetime)
-      description: Input_datetime entity storing when Dose 4 was last logged (optional).
+      name: Dose 4 Last Taken
       selector:
         entity:
           domain: input_datetime
 
-    # --- Reminders ---
     enable_reminders:
       name: Enable Reminders
-      description: >
-        Turn on reminder notifications if a dose is not logged by its scheduled time + offset.
       default: true
       selector: { boolean: {} }
 
     reminder_offset:
       name: Reminder Offset (minutes after scheduled time)
-      description: >
-        How long after the scheduled time to wait before sending a reminder
-        if the dose has not been logged. Example: 30 → 9:00 AM dose reminds at 9:30 AM.
       default: 30
       selector:
         number:
@@ -178,29 +126,19 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
-    # --- Inventory (optional add-on) ---
     enable_inventory:
       name: Enable Inventory Tracking
-      description: >
-        When ON, a successful (in-window) scan will decrement inventory
-        and send low/out alerts with optional refill context.
       default: true
       selector: { boolean: {} }
 
     inventory_entity:
-      name: Inventory (remaining units) - input_number
-      description: >
-        input_number that stores how many units are left.
-        Set this to your current count (e.g., 90).
-        Example: input_number.metformin_inventory
+      name: Inventory (remaining units)
       selector:
         entity:
           domain: input_number
 
     units_per_dose:
       name: Units per Dose
-      description: >
-        How many units to subtract per successful dose (e.g., 1 tablet).
       default: 1
       selector:
         number:
@@ -210,9 +148,6 @@ blueprint:
 
     low_inventory_threshold:
       name: Low Inventory Threshold
-      description: >
-        When inventory falls to this number or below, send a low-stock alert.
-        Example: 10.
       default: 10
       selector:
         number:
@@ -221,19 +156,13 @@ blueprint:
           step: 1
 
     refills_left_entity:
-      name: Refills Left (optional) - input_number
-      description: >
-        input_number storing how many refills remain on the prescription.
-        Leave blank if not tracked.
-        Example: input_number.metformin_refills_left
+      name: Refills Left (optional)
       selector:
         entity:
           domain: input_number
 
     pills_per_refill:
       name: Units per Refill (optional)
-      description: >
-        For info in alerts (not automated). Example: 90.
       default: 90
       selector:
         number:
@@ -243,9 +172,6 @@ blueprint:
 
     pharmacy_contact_note:
       name: Pharmacy/Contact Note (optional)
-      description: >
-        Shown in low/out alerts. Example: "CVS Frederick, (301) 555-1234".
-      default: ""
       selector: { text: {} }
 
 mode: restart
@@ -585,3 +511,4 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) was scheduled but not logged.
                 Directions: {{ v_med_directions }}
+
