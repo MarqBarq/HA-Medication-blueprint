@@ -1,14 +1,25 @@
 blueprint:
-  name: NFC Medication Logger (up to 4 doses, inline times or helpers, beta v7)
-  description: >
+  name: NFC Medication Logger (up to 4 doses, beta v7)
+  description: |
     Track up to 4 daily medication doses using an NFC/RFID tag.
-    Valid scans inside a global time window log the dose timestamp, prevent double-logging,
-    send contextual push notifications, and (optionally) decrement inventory with low/out alerts.
-    Also supports reminders (scheduled time + offset) if a dose was not logged.
-    For each dose, you can EITHER select an inline time OR a helper entity; inline time takes precedence.
+    
+    ✅ Features:
+    - Scan an NFC tag when you take your medication.
+    - Logs the timestamp of each dose (up to 4 per day).
+    - Prevents double-logging (warns if already taken today).
+    - Warns if scanned too early/late (shows when the next dose is).
+    - Sends reminders if a dose was missed (configurable offset).
+    - Optional inventory tracking (subtracts pills, warns when low or out).
+    
+    💡 Notes:
+    - Each dose can be set via an inline time (in this blueprint) or a helper entity.
+    - Inline times take precedence if both are provided.
+    - Caregiver-friendly notifications include dose, directions, and inventory context.
+    
   domain: automation
 
   input:
+    # --- Basic medication info ---
     med_name:
       name: Medication Name
       selector: { text: {} }
@@ -21,23 +32,24 @@ blueprint:
       name: Directions
       selector: { text: {} }
 
+    # --- Tag & notifications ---
     tag_id:
       name: NFC Tag ID
-      description: >
-        Enter the Tag ID from Settings → Tags. Example: 8b7d7f4c-xxxx-xxxx.
+      description: Paste the tag ID from Settings → Tags
       selector:
         text: {}
 
     notify_service:
       name: Notify Service
       description: >
-        Enter the notify service you want to use.
-        Example: notify.mobile_app_mark_s_phone_2.
+        Enter the notify service to send push notifications.
+        Example: notify.mobile_app_mark_s_phone_2
       selector:
         text: {}
 
+    # --- Global scan window ---
     dose_window:
-      name: Global Dose Window (minutes before/after scheduled time)
+      name: Dose Window (minutes before/after scheduled time)
       default: 20
       selector:
         number:
@@ -46,7 +58,7 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
-    # Doses 1–4 (inline time + helper + taken)
+    # --- Doses (inline or helper + last taken entity) ---
     dose1_time_inline:
       name: Dose 1 Time (inline)
       selector: { time: {} }
@@ -111,6 +123,7 @@ blueprint:
         entity:
           domain: input_datetime
 
+    # --- Reminders ---
     enable_reminders:
       name: Enable Reminders
       default: true
@@ -126,9 +139,10 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
+    # --- Inventory (optional) ---
     enable_inventory:
       name: Enable Inventory Tracking
-      default: true
+      default: false
       selector: { boolean: {} }
 
     inventory_entity:
@@ -174,24 +188,14 @@ blueprint:
       name: Pharmacy/Contact Note (optional)
       selector: { text: {} }
 
-mode: restart
-
+# ==================== VARIABLES ====================
 variables:
   v_med_name: !input med_name
   v_med_dose: !input med_dose
   v_med_directions: !input med_directions
-
-  # Derive notify service: prefer mobile_app device if selected, else manual service
-  v_notify_device: !input notify_mobile_device
-  v_notify_manual: !input notify_service
-  v_notify: >
-    {% if v_notify_device %}
-      {{ 'notify.mobile_app_' ~ (device_attr(v_notify_device, 'name') | slugify) }}
-    {% else %}
-      {{ v_notify_manual }}
-    {% endif %}
-
+  v_notify: !input notify_service
   v_window: !input dose_window
+
   v_enable_reminders: !input enable_reminders
   v_reminder_offset: !input reminder_offset
 
@@ -203,7 +207,7 @@ variables:
   v_units_per_refill: !input pills_per_refill
   v_pharmacy_note: !input pharmacy_contact_note
 
-  # Times: inline or entity (inline wins)
+  # Dose config
   v_d1_inline: !input dose1_time_inline
   v_d1_entity: !input dose1_time_entity
   v_d2_inline: !input dose2_time_inline
@@ -218,45 +222,46 @@ variables:
   v_d3_taken: !input dose3_taken
   v_d4_taken: !input dose4_taken
 
-# Triggers (tag + reminder anchors for inline and entity times)
+# ==================== TRIGGERS ====================
 trigger:
+  # Tag scan
   - platform: tag
     tag_id: !input tag_id
 
+  # Reminders (both inline & entity)
   - platform: time
     at: !input dose1_time_inline
-    id: dose1_inline_reminder
+    id: dose1_reminder
   - platform: time
     at: !input dose1_time_entity
-    id: dose1_entity_reminder
+    id: dose1_reminder
 
   - platform: time
     at: !input dose2_time_inline
-    id: dose2_inline_reminder
+    id: dose2_reminder
   - platform: time
     at: !input dose2_time_entity
-    id: dose2_entity_reminder
+    id: dose2_reminder
 
   - platform: time
     at: !input dose3_time_inline
-    id: dose3_inline_reminder
+    id: dose3_reminder
   - platform: time
     at: !input dose3_time_entity
-    id: dose3_entity_reminder
+    id: dose3_reminder
 
   - platform: time
     at: !input dose4_time_inline
-    id: dose4_inline_reminder
+    id: dose4_reminder
   - platform: time
     at: !input dose4_time_entity
-    id: dose4_entity_reminder
+    id: dose4_reminder
 
+# ==================== ACTIONS ====================
 action:
   - choose:
 
-      # =========================================
-      # ========== NFC TAG SCAN BRANCH ==========
-      # =========================================
+      # ========== TAG SCAN ==========
       - conditions:
           - condition: template
             value_template: "{{ trigger.platform == 'tag' }}"
@@ -264,13 +269,11 @@ action:
           - variables:
               now_ts: "{{ as_timestamp(now()) }}"
               today: "{{ now().date() }}"
-
-              # Resolve times (prefer inline; else helper state)
+              # Resolve times for all doses
               t1: "{{ v_d1_inline if v_d1_inline else (states(v_d1_entity) if v_d1_entity else '') }}"
               t2: "{{ v_d2_inline if v_d2_inline else (states(v_d2_entity) if v_d2_entity else '') }}"
               t3: "{{ v_d3_inline if v_d3_inline else (states(v_d3_entity) if v_d3_entity else '') }}"
               t4: "{{ v_d4_inline if v_d4_inline else (states(v_d4_entity) if v_d4_entity else '') }}"
-
               doses: >
                 {{ [
                   {'t': t1, 'taken': v_d1_taken},
@@ -279,17 +282,13 @@ action:
                   {'t': t4, 'taken': v_d4_taken}
                 ] }}
 
+          # Find the matching dose (in window)
           - variables:
-              # Find the first dose whose window contains now()
               valid_dose: >
                 {% set ns = namespace(result=None) %}
                 {% for d in doses %}
                   {% if d.t not in ['', 'unknown', 'unavailable'] %}
-                    {% if d.t|length > 8 %}
-                      {% set sched_dt = as_local(as_datetime(d.t)) %}
-                    {% else %}
-                      {% set sched_dt = today_at(d.t) %}
-                    {% endif %}
+                    {% set sched_dt = today_at(d.t) %}
                     {% if sched_dt %}
                       {% set sched_ts = as_timestamp(sched_dt) %}
                       {% set win_start = sched_ts - (v_window|int * 60) %}
@@ -304,7 +303,7 @@ action:
                 {{ ns.result }}
 
           - choose:
-              # --- Inside a valid window ---
+              # --- Inside window ---
               - conditions:
                   - condition: template
                     value_template: "{{ valid_dose is not none }}"
@@ -313,7 +312,7 @@ action:
                       taken_str: "{{ states(valid_dose.taken) }}"
                       taken_dt: "{{ as_datetime(taken_str) if taken_str not in ['unknown','unavailable',''] else none }}"
                   - choose:
-                      # Already logged today → say when it was taken
+                      # Already taken
                       - conditions:
                           - condition: template
                             value_template: "{{ taken_dt and taken_dt.date() == today }}"
@@ -322,9 +321,9 @@ action:
                             data:
                               title: "⚠ Already taken"
                               message: >
-                                {{ v_med_name }} ({{ v_med_dose }}) was already taken today at
+                                {{ v_med_name }} ({{ v_med_dose }}) already taken today at
                                 {{ taken_dt.strftime('%-I:%M %p') }}.
-                      # First log today → record timestamp + inventory handling
+                      # First scan today
                       - conditions: []
                         sequence:
                           - service: input_datetime.set_datetime
@@ -340,36 +339,23 @@ action:
                                 {{ as_local(now()).strftime('%-I:%M %p') }}.
                                 Directions: {{ v_med_directions }}
 
-                          # ----- Inventory handling (optional) -----
+                          # Inventory
                           - choose:
                               - conditions:
                                   - condition: template
-                                    value_template: "{{ v_inv_enabled and v_inv_entity is not none and v_inv_entity != '' }}"
+                                    value_template: "{{ v_inv_enabled and v_inv_entity }}"
                                 sequence:
                                   - variables:
-                                      current_qty: >
-                                        {% set v = states(v_inv_entity) %}
-                                        {{ (v | float(0)) if v not in ['unknown','unavailable',''] else 0 }}
-                                      subtract: "{{ v_units_per_dose | int }}"
-                                      new_qty: >
-                                        {% set n = (current_qty | int) - (subtract | int) %}
-                                        {{ 0 if n < 0 else n }}
-
+                                      current_qty: "{{ states(v_inv_entity) | int(0) }}"
+                                      new_qty: "{{ (current_qty - v_units_per_dose|int) | max(0) }}"
                                   - service: input_number.set_value
                                     target:
                                       entity_id: "{{ v_inv_entity }}"
                                     data:
                                       value: "{{ new_qty }}"
-
                                   - variables:
-                                      refills_left: >
-                                        {% if v_refills_left_entity %}
-                                          {% set r = states(v_refills_left_entity) %}
-                                          {{ (r | int(0)) if r not in ['unknown','unavailable',''] else 0 }}
-                                        {% else %} {{ None }} {% endif %}
-
+                                      refills_left: "{{ states(v_refills_left_entity) | int(0) if v_refills_left_entity else None }}"
                                   - choose:
-                                      # Out of stock
                                       - conditions:
                                           - condition: template
                                             value_template: "{{ new_qty == 0 }}"
@@ -378,137 +364,68 @@ action:
                                             data:
                                               title: "⛔ Out of medication"
                                               message: >
-                                                {{ v_med_name }} ({{ v_med_dose }}) inventory is now 0.
-                                                {% if refills_left is not none %}Refills left: {{ refills_left }}. {% endif %}
-                                                {% if v_units_per_refill|int > 0 %}Typical refill: {{ v_units_per_refill }} units. {% endif %}
-                                                {{ 'Contact: ' ~ v_pharmacy_note if v_pharmacy_note }}
-                                      # Low stock
+                                                {{ v_med_name }} is out of stock.
+                                                {% if refills_left is not none %}Refills left: {{ refills_left }}.{% endif %}
+                                                {% if v_units_per_refill|int > 0 %}Typical refill: {{ v_units_per_refill }} units.{% endif %}
+                                                {{ v_pharmacy_note }}
                                       - conditions:
                                           - condition: template
-                                            value_template: "{{ new_qty <= (v_low_thresh | int) and new_qty > 0 }}"
+                                            value_template: "{{ new_qty <= v_low_thresh and new_qty > 0 }}"
                                         sequence:
                                           - service: "{{ v_notify }}"
                                             data:
                                               title: "⚠ Low medication inventory"
                                               message: >
-                                                {{ v_med_name }} ({{ v_med_dose }}) is low: {{ new_qty }} left
+                                                {{ v_med_name }} low: {{ new_qty }} left
                                                 (threshold {{ v_low_thresh }}).
-                                                {% if refills_left is not none %}Refills left: {{ refills_left }}. {% endif %}
-                                                {{ 'Contact: ' ~ v_pharmacy_note if v_pharmacy_note }}
+                                                {% if refills_left is not none %}Refills left: {{ refills_left }}.{% endif %}
+                                                {{ v_pharmacy_note }}
 
-              # --- Outside all windows → tell next dose time ---
+              # --- Outside window ---
               - conditions: []
                 sequence:
                   - variables:
-                      # Build aware datetimes for today from times
-                      c1: >
-                        {% if t1 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t1)) if t1|length > 8 else today_at(t1) }}
-                        {% else %}{{ none }}{% endif %}
-                      c2: >
-                        {% if t2 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t2)) if t2|length > 8 else today_at(t2) }}
-                        {% else %}{{ none }}{% endif %}
-                      c3: >
-                        {% if t3 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t3)) if t3|length > 8 else today_at(t3) }}
-                        {% else %}{{ none }}{% endif %}
-                      c4: >
-                        {% if t4 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t4)) if t4|length > 8 else today_at(t4) }}
-                        {% else %}{{ none }}{% endif %}
-
-                      now_ts2: "{{ as_timestamp(now()) }}"
-
-                      next_today: >
-                        {% set cand = [c1, c2, c3, c4]
-                           | reject('equalto', none)
-                           | map('as_timestamp')
-                           | select('ge', now_ts2)
-                           | list %}
-                        {% if cand|length > 0 %}
-                          {{ as_datetime(cand|min) }}
-                        {% else %}
-                          {{ none }}
-                        {% endif %}
-
-                      next_tomorrow: >
-                        {% if next_today %}
-                          {{ none }}
-                        {% else %}
-                          {% set today = now().date() %}
-                          {% set tomorrow = today + timedelta(days=1) %}
-                          {% set ts = [] %}
-                          {% if t1 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t1)) + timedelta(days=1)) if t1|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t1)) ] %}
-                          {% endif %}
-                          {% if t2 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t2)) + timedelta(days=1)) if t2|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t2)) ] %}
-                          {% endif %}
-                          {% if t3 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t3)) + timedelta(days=1)) if t3|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t3)) ] %}
-                          {% endif %}
-                          {% if t4 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t4)) + timedelta(days=1)) if t4|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t4)) ] %}
-                          {% endif %}
-                          {% if ts|length > 0 %}
-                            {{ as_datetime(ts|min) }}
-                          {% else %}
-                            {{ none }}
-                          {% endif %}
-                        {% endif %}
-
-                      next_sched: "{{ next_today if next_today else next_tomorrow }}"
                       next_sched_fmt: >
-                        {% if next_sched %}
-                          {{ as_local(as_datetime(next_sched)).strftime('%-I:%M %p') }}
+                        {% set times = [t1, t2, t3, t4] | reject('equalto','') | list %}
+                        {% set future = [] %}
+                        {% for t in times %}
+                          {% set dt = today_at(t) %}
+                          {% if dt and dt >= now() %}
+                            {% set _ = future.append(dt) %}
+                          {% endif %}
+                        {% endfor %}
+                        {% if future|length > 0 %}
+                          {{ future|min }}
+                        {% else %}
+                          {{ none }}
+                        {% endif %}
+                      next_fmt: >
+                        {% if next_sched_fmt %}
+                          {{ as_local(next_sched_fmt).strftime('%-I:%M %p') }}
                         {% else %}
                           the next scheduled time
                         {% endif %}
-
                   - service: "{{ v_notify }}"
                     data:
                       title: "⏳ Not time yet"
                       message: >
                         It's not time for {{ v_med_name }} yet.
-                        Next dose at {{ next_sched_fmt }}.
+                        Next dose at {{ next_fmt }}.
 
-      # =========================================
-      # ============ REMINDER BRANCH ============
-      # =========================================
+      # ========== REMINDER ==========
       - conditions:
           - condition: template
             value_template: >
               {{ trigger.id in [
-                   'dose1_inline_reminder','dose1_entity_reminder',
-                   'dose2_inline_reminder','dose2_entity_reminder',
-                   'dose3_inline_reminder','dose3_entity_reminder',
-                   'dose4_inline_reminder','dose4_entity_reminder'
-                 ] and v_enable_reminders }}
+                'dose1_reminder','dose2_reminder',
+                'dose3_reminder','dose4_reminder'
+              ] and v_enable_reminders }}
         sequence:
-          - variables:
-              today: "{{ now().date() }}"
-              dose_taken_entity: >
-                {% if 'dose1_' in trigger.id %} {{ v_d1_taken }}
-                {% elif 'dose2_' in trigger.id %} {{ v_d2_taken }}
-                {% elif 'dose3_' in trigger.id %} {{ v_d3_taken }}
-                {% elif 'dose4_' in trigger.id %} {{ v_d4_taken }}
-                {% endif %}
           - delay:
               minutes: "{{ v_reminder_offset | int }}"
-          - variables:
-              taken_str: "{{ states(dose_taken_entity) if dose_taken_entity else '' }}"
-              taken_dt: "{{ as_datetime(taken_str) if taken_str not in ['unknown','unavailable',''] else none }}"
-          - condition: template
-            value_template: "{{ not taken_dt or taken_dt.date() != today }}"
           - service: "{{ v_notify }}"
             data:
               title: "💊 Reminder"
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) was scheduled but not logged.
                 Directions: {{ v_med_directions }}
-
