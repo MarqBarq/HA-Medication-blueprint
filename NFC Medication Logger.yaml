@@ -453,74 +453,24 @@ action:
                                                 {% if refills_left is not none %}Refills left: {{ refills_left }}. {% endif %}
                                                 {{ 'Contact: ' ~ v_pharmacy_note if v_pharmacy_note }}
 
-              # --- Outside all windows → tell next dose time ---
+                           # --- Outside all windows → tell next dose time ---
               - conditions: []
                 sequence:
                   - variables:
-                      # Build aware datetimes for today from times
-                      c1: >
-                        {% if t1 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t1)) if t1|length > 8 else today_at(t1) }}
-                        {% else %}{{ none }}{% endif %}
-                      c2: >
-                        {% if t2 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t2)) if t2|length > 8 else today_at(t2) }}
-                        {% else %}{{ none }}{% endif %}
-                      c3: >
-                        {% if t3 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t3)) if t3|length > 8 else today_at(t3) }}
-                        {% else %}{{ none }}{% endif %}
-                      c4: >
-                        {% if t4 not in ['', 'unknown', 'unavailable'] %}
-                          {{ as_local(as_datetime(t4)) if t4|length > 8 else today_at(t4) }}
-                        {% else %}{{ none }}{% endif %}
-
-                      now_ts2: "{{ as_timestamp(now()) }}"
-                      next_today: >
-                        {% set cand = [c1, c2, c3, c4] | reject('equalto', none) | map('as_timestamp') | select('ge', now_ts2) | list %}
-                        {% if cand|length > 0 %}
-                          {{ as_datetime(cand|min) }}
+                      next_sched_fmt: >
+                        {% if next_sched %}
+                          {{ as_local(as_datetime(next_sched)).strftime('%-I:%M %p') }}
                         {% else %}
-                          {{ none }}
+                          the next scheduled time
                         {% endif %}
 
-                      next_tomorrow: >
-                        {% if next_today %}
-                          {{ none }}
-                        {% else %}
-                          {% set today = now().date() %}
-                          {% set tomorrow = today + timedelta(days=1) %}
-                          {% set ts = [] %}
-                          {% if t1 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t1)) + timedelta(days=1)) if t1|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t1)) ] %}
-                          {% endif %}
-                          {% if t2 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t2)) + timedelta(days=1)) if t2|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t2)) ] %}
-                          {% endif %}
-                          {% if t3 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t3)) + timedelta(days=1)) if t3|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t3)) ] %}
-                          {% endif %}
-                          {% if t4 not in ['', 'unknown', 'unavailable'] %}
-                            {% set ts = ts + [ as_timestamp(as_local(as_datetime(t4)) + timedelta(days=1)) if t4|length > 8
-                                               else as_timestamp(as_datetime(tomorrow ~ ' ' ~ t4)) ] %}
-                          {% endif %}
-                          {% if ts|length > 0 %}
-                            {{ as_datetime(ts|min) }}
-                          {% else %}
-                            {{ none }}
-                          {% endif %}
-                        {% endif %}
-
-                      next_sched: "{{ next_today if next_today else next_tomorrow }}"
                   - service: "{{ v_notify }}"
                     data:
                       title: "⏳ Not time yet"
                       message: >
                         It's not time for {{ v_med_name }} yet.
-                        Next dose at {{ next_sched.strftime('%-I:%M %p') if next_sched else "the next scheduled time" }}.
+                        Next dose at {{ next_sched_fmt }}.
+
 
       # =========================================
       # ============ REMINDER BRANCH ============
@@ -556,3 +506,4 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) was scheduled but not logged.
                 Directions: {{ v_med_directions }}
+
