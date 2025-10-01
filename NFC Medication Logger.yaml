@@ -34,19 +34,29 @@ blueprint:
 
     # --- Tag + notifications ---
     tag_id:
-      name: NFC Tag ID
-      description: >
-        The ID of the NFC/RFID tag attached to the medication bottle.
-        Create/scan tags in Home Assistant (Settings → Tags) and copy the Tag ID.
-      selector: { text: {} }
+  name: NFC Tag
+  description: >
+    Pick one of your registered Tags (Settings → Tags). This will fill in the tag ID automatically.
+  selector:
+    tag: {}
 
-    notify_service:
-      name: Notify Service
-      description: >
-        The Home Assistant notify service for push alerts.
-        Example: "notify.mobile_app_mark_s_phone_2".
-      default: notify.mobile_app_mark_s_phone_2
-      selector: { text: {} }
+notify_mobile_device:
+  name: Phone (Mobile App)
+  description: >
+    Pick your phone if you use the Home Assistant Companion App.
+    We’ll auto-use its push notify service (notify.mobile_app_<device>).
+    Leave blank if you prefer to enter a custom notify service below.
+  selector:
+    device:
+      integration: mobile_app
+
+notify_service:
+  name: Notify Service (manual fallback)
+  description: >
+    Optional. If you don’t select a phone above, enter a full notify service here.
+    Example: notify.mobile_app_mark_s_phone_2 or notify.telegram_mark.
+  selector:
+    text: {}
 
     # --- Global scan window ---
     dose_window:
@@ -244,7 +254,15 @@ variables:
   v_med_name: !input med_name
   v_med_dose: !input med_dose
   v_med_directions: !input med_directions
-  v_notify: !input notify_service
+  v_notify_device: !input notify_mobile_device
+  v_notify_manual: !input notify_service
+  v_notify: >
+    {% if v_notify_device %}
+      {{ 'notify.mobile_app_' ~ (device_attr(v_notify_device, 'name') | slugify) }}
+    {% else %}
+      {{ v_notify_manual }}
+    {% endif %}
+
   v_window: !input dose_window
 
   v_enable_reminders: !input enable_reminders
@@ -506,4 +524,5 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) was scheduled but not logged.
                 Directions: {{ v_med_directions }}
+
 
