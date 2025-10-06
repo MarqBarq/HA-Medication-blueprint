@@ -1,62 +1,60 @@
 blueprint:
-  name: NFC Medication Logger (v8 – simplified setup)
+  name: "NFC Medication Logger (v8 – simplified setup)"
   description: |
     💊 **Medication Tracker (Easy Setup)**
 
     This version focuses on usability: each automation = one medication.
 
     ✅ Features:
-    - Tap an NFC tag to log a dose.
-    - Prevents duplicate scans per day.
-    - Warns if scanned too early/late (shows next dose).
-    - Optional reminders for missed doses.
-    - Optional inventory tracking.
-    - Works automatically with the Medication Dashboard (entities named "med_*").
+      • Tap an NFC tag to log a dose  
+      • Prevent duplicate scans per day  
+      • Warn if scanned too early/late (shows next dose)  
+      • Optional reminders for missed doses  
+      • Optional inventory tracking  
+      • Works automatically with the Medication Dashboard (entities named "med_*")
 
-    🧭 Setup Steps:
-    1. Fill out the form below (no YAML required).
-    2. Use the medication name (e.g. "Advil") — it will be used in entity names.
-    3. Add the helpers suggested in the description (HA will guide you).
-    4. Scan your NFC tag to link it.
-    5. That’s it! The dashboard will show your medication automatically.
-
+    🧭 **Setup Steps**
+      1. Fill out the form below (no YAML required)  
+      2. Use the medication name (e.g., "Advil") — it will be used in entity names  
+      3. Add the helpers suggested in the description (Home Assistant will guide you)  
+      4. Scan your NFC tag to link it  
+      5. The dashboard will show your medication automatically
   domain: automation
 
   input:
     med_name:
-      name: Medication Name
-      description: >
-        Used to build helper entity names automatically. Example: "Advil" → `med_advil_*`
-      selector: { text: {} }
+      name: "Medication Name"
+      description: "Used to build helper entity names automatically. Example: Advil → med_advil_*"
+      selector:
+        text: {}
 
     med_dose:
-      name: Dose
-      description: e.g., "200 mg", "1 tablet"
-      selector: { text: {} }
+      name: "Dose"
+      description: "e.g., 200 mg, 1 tablet"
+      selector:
+        text: {}
 
     med_directions:
-      name: Directions
-      description: e.g., "Take every 6 hours as needed for pain"
-      selector: { text: {} }
+      name: "Directions"
+      description: "e.g., Take every 6 hours as needed for pain"
+      selector:
+        text: {}
 
     tag_id:
-      name: NFC Tag ID
-      description: >
-        Paste the Tag ID from Settings → Tags. Each medication should have its own tag.
+      name: "NFC Tag ID"
+      description: "Paste the Tag ID from Settings → Tags. Each medication should have its own tag."
       selector:
         text: {}
 
     notify_service:
-      name: Notify Service
-      description: >
-        The notify service to send push notifications. Example: `notify.mobile_app_mark_s_phone_2`
+      name: "Notify Service"
+      description: "The notify service to send push notifications. Example: notify.mobile_app_mark_s_phone_2"
       selector:
         text: {}
 
     dose_window:
-      name: Dose Window (minutes before/after scheduled time)
-      description: >
-        Valid time window around scheduled dose. Example: 20 = +/- 20 minutes.
+      name: "Dose Window (minutes before/after scheduled time)"
+      description: "Valid time window around scheduled dose. Example: 20 = ±20 minutes."
       default: 20
       selector:
         number:
@@ -65,27 +63,31 @@ blueprint:
           step: 1
           unit_of_measurement: minutes
 
-    # --- Doses (inline only for simplicity) ---
     dose1_time:
-      name: Dose 1 Time
-      selector: { time: {} }
+      name: "Dose 1 Time"
+      selector:
+        time: {}
     dose2_time:
-      name: Dose 2 Time (optional)
-      selector: { time: {} }
+      name: "Dose 2 Time (optional)"
+      selector:
+        time: {}
     dose3_time:
-      name: Dose 3 Time (optional)
-      selector: { time: {} }
+      name: "Dose 3 Time (optional)"
+      selector:
+        time: {}
     dose4_time:
-      name: Dose 4 Time (optional)
-      selector: { time: {} }
+      name: "Dose 4 Time (optional)"
+      selector:
+        time: {}
 
     enable_reminders:
-      name: Enable Reminders
+      name: "Enable Reminders"
       default: true
-      selector: { boolean: {} }
+      selector:
+        boolean: {}
 
     reminder_offset:
-      name: Reminder Offset (minutes after scheduled time)
+      name: "Reminder Offset (minutes after scheduled time)"
       default: 30
       selector:
         number:
@@ -95,20 +97,20 @@ blueprint:
           unit_of_measurement: minutes
 
     enable_inventory:
-      name: Enable Inventory Tracking
+      name: "Enable Inventory Tracking"
       default: false
-      selector: { boolean: {} }
+      selector:
+        boolean: {}
 
     inventory_entity:
-      name: Inventory (remaining units)
-      description: >
-        If tracking inventory, select or create an input_number named `input_number.med_<name>_inventory`.
+      name: "Inventory (remaining units)"
+      description: "If tracking inventory, select or create an input_number named input_number.med_<name>_inventory."
       selector:
         entity:
           domain: input_number
 
     low_inventory_threshold:
-      name: Low Inventory Threshold
+      name: "Low Inventory Threshold"
       default: 10
       selector:
         number:
@@ -118,7 +120,6 @@ blueprint:
 
 mode: restart
 
-# ========== VARIABLES ==========
 variables:
   v_med_name: !input med_name
   v_slug: "{{ v_med_name | lower | replace(' ','_') }}"
@@ -134,19 +135,16 @@ variables:
   v_inv_entity: !input inventory_entity
   v_low_thresh: !input low_inventory_threshold
 
-  # Construct entity names automatically
   dose1_time: !input dose1_time
   dose2_time: !input dose2_time
   dose3_time: !input dose3_time
   dose4_time: !input dose4_time
 
-  # "Taken" helpers follow predictable naming pattern
   dose1_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose1_taken' }}"
   dose2_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose2_taken' }}"
   dose3_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose3_taken' }}"
   dose4_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose4_taken' }}"
 
-# ========== TRIGGERS ==========
 trigger:
   - platform: tag
     tag_id: !input tag_id
@@ -164,7 +162,6 @@ trigger:
     at: !input dose4_time
     id: dose4_reminder
 
-# ========== ACTIONS ==========
 action:
   - choose:
 
@@ -204,8 +201,8 @@ action:
                 {% endfor %}
                 {{ ns.result }}
 
-          # --- Inside window ---
           - choose:
+              # --- Inside window ---
               - conditions:
                   - condition: template
                     value_template: "{{ valid_dose is not none }}"
@@ -238,7 +235,8 @@ action:
                             data:
                               title: "✅ Dose logged"
                               message: >
-                                {{ v_med_name }} ({{ v_med_dose }}) logged at {{ as_local(now()).strftime('%-I:%M %p') }}.
+                                {{ v_med_name }} ({{ v_med_dose }}) logged at
+                                {{ as_local(now()).strftime('%-I:%M %p') }}.
                                 Directions: {{ v_med_directions }}
 
                           # --- Inventory tracking ---
@@ -273,7 +271,8 @@ action:
                                             data:
                                               title: "⚠ Low medication inventory"
                                               message: >
-                                                {{ v_med_name }} running low: {{ new }} units left (threshold {{ v_low_thresh }}).
+                                                {{ v_med_name }} running low: {{ new }} units left
+                                                (threshold {{ v_low_thresh }}).
 
               # --- Outside window ---
               - conditions: []
@@ -305,7 +304,8 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ trigger.id in ['dose1_reminder','dose2_reminder','dose3_reminder','dose4_reminder'] and v_enable_reminders }}
+              {{ trigger.id in ['dose1_reminder','dose2_reminder','dose3_reminder','dose4_reminder']
+                 and v_enable_reminders }}
         sequence:
           - delay:
               minutes: "{{ v_reminder_offset | int }}"
