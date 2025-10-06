@@ -284,21 +284,19 @@ action:
               - conditions: []
                 sequence:
                   - variables:
-                      future: >
-                        {% set f = [] %}
-                        {% for t in times if t %}
-                          {% set dt = today_at(t) %}
-                          {% if dt >= now() %}
-                            {% set _ = f.append(dt) %}
-                          {% endif %}
-                        {% endfor %}
-                        {{ f|min if f else none }}
-                      next_fmt: >
-                        {% if future %}
-                          {{ as_local(future).strftime('%-I:%M %p') }}
-                        {% else %}
-                          tomorrow {{ as_local(today_at(times|min) + timedelta(days=1)).strftime('%-I:%M %p') }}
-                        {% endif %}
+                    future: >
+                      {% set future =
+                         [ today_at(t) for t in times if t and today_at(t) >= now() ]
+                      %}
+                      {{ future|min if future|length > 0 else none }}
+                    
+                    next_fmt: >
+                      {% if future %}
+                        {{ as_local(future).strftime('%-I:%M %p') }}
+                      {% else %}
+                        {% set next_day = today_at(times|min) + timedelta(days=1) %}
+                        tomorrow {{ as_local(next_day).strftime('%-I:%M %p') }}
+                      {% endif %}
                   - service: "{{ v_notify }}"
                     data:
                       title: "⏳ Not time yet"
@@ -321,4 +319,5 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) scheduled but not logged.
                 Directions: {{ v_med_directions }}
+
 
