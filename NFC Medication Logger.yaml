@@ -1,60 +1,55 @@
 blueprint:
-  name: "NFC Medication Logger (v8 – simplified setup)"
+  name: "NFC Medication Logger (v9 – stable)"
   description: |
-    💊 **Medication Tracker (Easy Setup)**
+    💊 **Medication Tracker – Easy Setup**
 
-    This version focuses on usability: each automation = one medication.
+    One automation = one medication.
 
     ✅ Features:
       • Tap an NFC tag to log a dose  
       • Prevent duplicate scans per day  
       • Warn if scanned too early/late (shows next dose)  
       • Optional reminders for missed doses  
-      • Optional inventory tracking  
+      • Optional inventory tracking (with units-per-dose)  
       • Works automatically with the Medication Dashboard (entities named "med_*")
 
-    🧭 **Setup Steps**
-      1. Fill out the form below (no YAML required)  
-      2. Use the medication name (e.g., "Advil") — it will be used in entity names  
-      3. Add the helpers suggested in the description (Home Assistant will guide you)  
-      4. Scan your NFC tag to link it  
-      5. The dashboard will show your medication automatically
+    🧭 **Setup**
+      1. Fill out the form (no YAML).  
+      2. Use a medication name (e.g., "Advil"); helpers should match the pattern `med_<name>_*`.  
+      3. Create the “taken” helpers once:  
+         `input_datetime.med_advil_dose1_taken` … `dose4_taken`  
+         (and `input_number.med_advil_inventory` if tracking pills).  
+      4. Scan the tag to log doses.  
+      5. The dashboard will populate automatically.
   domain: automation
 
   input:
     med_name:
       name: "Medication Name"
-      description: "Used to build helper entity names automatically. Example: Advil → med_advil_*"
-      selector:
-        text: {}
+      selector: { text: {} }
 
     med_dose:
-      name: "Dose"
-      description: "e.g., 200 mg, 1 tablet"
-      selector:
-        text: {}
+      name: "Dose Description"
+      description: "Example: 200 mg, 1 tablet"
+      selector: { text: {} }
 
     med_directions:
       name: "Directions"
-      description: "e.g., Take every 6 hours as needed for pain"
-      selector:
-        text: {}
+      description: "Example: Take every 6 hours as needed for pain"
+      selector: { text: {} }
 
     tag_id:
       name: "NFC Tag ID"
-      description: "Paste the Tag ID from Settings → Tags. Each medication should have its own tag."
-      selector:
-        text: {}
+      description: "Paste the Tag ID from Settings → Tags"
+      selector: { text: {} }
 
     notify_service:
       name: "Notify Service"
-      description: "The notify service to send push notifications. Example: notify.mobile_app_mark_s_phone_2"
-      selector:
-        text: {}
+      description: "Example: notify.mobile_app_mark_s_phone_2"
+      selector: { text: {} }
 
     dose_window:
-      name: "Dose Window (minutes before/after scheduled time)"
-      description: "Valid time window around scheduled dose. Example: 20 = ±20 minutes."
+      name: "Valid Window (minutes before/after scheduled time)"
       default: 20
       selector:
         number:
@@ -65,26 +60,21 @@ blueprint:
 
     dose1_time:
       name: "Dose 1 Time"
-      selector:
-        time: {}
+      selector: { time: {} }
     dose2_time:
       name: "Dose 2 Time (optional)"
-      selector:
-        time: {}
+      selector: { time: {} }
     dose3_time:
       name: "Dose 3 Time (optional)"
-      selector:
-        time: {}
+      selector: { time: {} }
     dose4_time:
       name: "Dose 4 Time (optional)"
-      selector:
-        time: {}
+      selector: { time: {} }
 
     enable_reminders:
       name: "Enable Reminders"
       default: true
-      selector:
-        boolean: {}
+      selector: { boolean: {} }
 
     reminder_offset:
       name: "Reminder Offset (minutes after scheduled time)"
@@ -99,15 +89,23 @@ blueprint:
     enable_inventory:
       name: "Enable Inventory Tracking"
       default: false
-      selector:
-        boolean: {}
+      selector: { boolean: {} }
 
     inventory_entity:
       name: "Inventory (remaining units)"
-      description: "If tracking inventory, select or create an input_number named input_number.med_<name>_inventory."
       selector:
         entity:
           domain: input_number
+
+    units_per_dose:
+      name: "Units per Dose"
+      description: "How many pills/units are taken per dose"
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
 
     low_inventory_threshold:
       name: "Low Inventory Threshold"
@@ -120,6 +118,7 @@ blueprint:
 
 mode: restart
 
+# ================= VARIABLES =================
 variables:
   v_med_name: !input med_name
   v_slug: "{{ v_med_name | lower | replace(' ','_') }}"
@@ -127,28 +126,25 @@ variables:
   v_med_directions: !input med_directions
   v_notify: !input notify_service
   v_window: !input dose_window
-
   v_enable_reminders: !input enable_reminders
   v_reminder_offset: !input reminder_offset
-
   v_inv_enabled: !input enable_inventory
   v_inv_entity: !input inventory_entity
+  v_units_per_dose: !input units_per_dose
   v_low_thresh: !input low_inventory_threshold
-
   dose1_time: !input dose1_time
   dose2_time: !input dose2_time
   dose3_time: !input dose3_time
   dose4_time: !input dose4_time
-
   dose1_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose1_taken' }}"
   dose2_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose2_taken' }}"
   dose3_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose3_taken' }}"
   dose4_taken: "{{ 'input_datetime.med_' ~ v_slug ~ '_dose4_taken' }}"
 
+# ================= TRIGGERS =================
 trigger:
   - platform: tag
     tag_id: !input tag_id
-
   - platform: time
     at: !input dose1_time
     id: dose1_reminder
@@ -162,10 +158,10 @@ trigger:
     at: !input dose4_time
     id: dose4_reminder
 
+# ================= ACTIONS =================
 action:
   - choose:
-
-      # --- NFC Tag Scanned ---
+      # ---------- TAG SCANNED ----------
       - conditions:
           - condition: template
             value_template: "{{ trigger.platform == 'tag' }}"
@@ -174,7 +170,8 @@ action:
               now_ts: "{{ as_timestamp(now()) }}"
               today: "{{ now().date() }}"
               times: >
-                {{ [dose1_time, dose2_time, dose3_time, dose4_time] | reject('in', ['','unknown','unavailable']) | list }}
+                {{ [dose1_time, dose2_time, dose3_time, dose4_time]
+                   | reject('in',['','unknown','unavailable']) | list }}
               doses: >
                 {{ [
                   {'t': dose1_time, 'taken': dose1_taken},
@@ -183,7 +180,7 @@ action:
                   {'t': dose4_time, 'taken': dose4_taken}
                 ] }}
 
-          # --- Find matching dose in window ---
+          # ---------- FIND MATCHING DOSE ----------
           - variables:
               valid_dose: >
                 {% set ns = namespace(result=None) %}
@@ -192,7 +189,7 @@ action:
                   {% if sched_dt %}
                     {% set sched_ts = as_timestamp(sched_dt) %}
                     {% set win_start = sched_ts - (v_window|int * 60) %}
-                    {% set win_end = sched_ts + (v_window|int * 60) %}
+                    {% set win_end   = sched_ts + (v_window|int * 60) %}
                     {% if now_ts >= win_start and now_ts <= win_end %}
                       {% set ns.result = d %}
                       {% break %}
@@ -202,23 +199,22 @@ action:
                 {{ ns.result }}
 
           - choose:
-              # --- Inside window ---
+              # ---------- INSIDE WINDOW ----------
               - conditions:
                   - condition: template
                     value_template: "{{ valid_dose is not none }}"
                 sequence:
                   - variables:
                       taken_entity: "{{ valid_dose.taken }}"
+                      last_val: "{{ states(taken_entity) }}"
                       last_dt: >
-                        {% set val = states(taken_entity) %}
-                        {% if val not in ['unknown','unavailable',''] %}
-                          {{ as_datetime(val) }}
+                        {% if last_val not in ['unknown','unavailable',''] %}
+                          {{ as_datetime(last_val) }}
                         {% else %}
                           {{ none }}
                         {% endif %}
-
                   - choose:
-                      # Already taken today
+                      # --- Already taken today ---
                       - conditions:
                           - condition: template
                             value_template: "{{ last_dt and last_dt.date() == today }}"
@@ -229,7 +225,7 @@ action:
                               message: >
                                 {{ v_med_name }} ({{ v_med_dose }}) already taken today at
                                 {{ last_dt.strftime('%-I:%M %p') }}.
-                      # First scan today
+                      # --- First scan today ---
                       - conditions: []
                         sequence:
                           - service: input_datetime.set_datetime
@@ -245,24 +241,24 @@ action:
                                 {{ as_local(now()).strftime('%-I:%M %p') }}.
                                 Directions: {{ v_med_directions }}
 
-                          # --- Inventory tracking ---
+                          # --- INVENTORY LOGIC ---
                           - choose:
                               - conditions:
                                   - condition: template
                                     value_template: "{{ v_inv_enabled and v_inv_entity }}"
                                 sequence:
                                   - variables:
-                                      current: "{{ states(v_inv_entity) | int(0) }}"
-                                      new: "{{ (current - 1) | max(0) }}"
+                                      current_qty: "{{ states(v_inv_entity) | int(0) }}"
+                                      new_qty: "{{ (current_qty - v_units_per_dose|int) | max(0) }}"
                                   - service: input_number.set_value
                                     target:
                                       entity_id: "{{ v_inv_entity }}"
                                     data:
-                                      value: "{{ new }}"
+                                      value: "{{ new_qty }}"
                                   - choose:
                                       - conditions:
                                           - condition: template
-                                            value_template: "{{ new == 0 }}"
+                                            value_template: "{{ new_qty == 0 }}"
                                         sequence:
                                           - service: "{{ v_notify }}"
                                             data:
@@ -271,32 +267,36 @@ action:
                                                 {{ v_med_name }} inventory is now 0. Please refill.
                                       - conditions:
                                           - condition: template
-                                            value_template: "{{ new <= v_low_thresh and new > 0 }}"
+                                            value_template: "{{ new_qty <= v_low_thresh and new_qty > 0 }}"
                                         sequence:
                                           - service: "{{ v_notify }}"
                                             data:
                                               title: "⚠ Low medication inventory"
                                               message: >
-                                                {{ v_med_name }} running low: {{ new }} units left
+                                                {{ v_med_name }} running low: {{ new_qty }} units left
                                                 (threshold {{ v_low_thresh }}).
 
-              # --- Outside window ---
+              # ---------- OUTSIDE WINDOW ----------
               - conditions: []
                 sequence:
                   - variables:
-                    future: >
-                      {% set future =
-                         [ today_at(t) for t in times if t and today_at(t) >= now() ]
-                      %}
-                      {{ future|min if future|length > 0 else none }}
-                    
-                    next_fmt: >
-                      {% if future %}
-                        {{ as_local(future).strftime('%-I:%M %p') }}
-                      {% else %}
-                        {% set next_day = today_at(times|min) + timedelta(days=1) %}
-                        tomorrow {{ as_local(next_day).strftime('%-I:%M %p') }}
-                      {% endif %}
+                      future_list: >
+                        {% set f = [] %}
+                        {% for t in times if t %}
+                          {% set dt = today_at(t) %}
+                          {% if dt >= now() %}
+                            {% set f = f + [dt] %}
+                          {% endif %}
+                        {% endfor %}
+                        {{ f }}
+                      next_dt: >
+                        {% if future_list | count > 0 %}
+                          {{ future_list | min }}
+                        {% else %}
+                          {{ today_at(times | min) + timedelta(days=1) }}
+                        {% endif %}
+                      next_fmt: >
+                        {{ as_local(as_datetime(next_dt)).strftime('%-I:%M %p') }}
                   - service: "{{ v_notify }}"
                     data:
                       title: "⏳ Not time yet"
@@ -304,7 +304,7 @@ action:
                         It's not time for {{ v_med_name }} yet.
                         Next dose at {{ next_fmt }}.
 
-      # --- Reminder branch ---
+      # ---------- REMINDER ----------
       - conditions:
           - condition: template
             value_template: >
@@ -319,5 +319,3 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) scheduled but not logged.
                 Directions: {{ v_med_directions }}
-
-
