@@ -209,8 +209,14 @@ action:
                 sequence:
                   - variables:
                       taken_entity: "{{ valid_dose.taken }}"
-                      last_str: "{{ states(taken_entity) }}"
-                      last_dt: "{{ as_datetime(last_str) if last_str not in ['unknown','unavailable',''] else none }}"
+                      last_dt: >
+                        {% set val = states(taken_entity) %}
+                        {% if val not in ['unknown','unavailable',''] %}
+                          {{ as_datetime(val) }}
+                        {% else %}
+                          {{ none }}
+                        {% endif %}
+
                   - choose:
                       # Already taken today
                       - conditions:
@@ -315,3 +321,4 @@ action:
               message: >
                 Reminder: {{ v_med_name }} ({{ v_med_dose }}) scheduled but not logged.
                 Directions: {{ v_med_directions }}
+
